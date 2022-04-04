@@ -1,8 +1,8 @@
-const core = require('@actions/core');
-const github = require('@actions/github');
-const axios = require('axios');
+const core = require("@actions/core");
+const github = require("@actions/github");
+const axios = require("axios");
 
-const READY_STATES = ['ready', 'current'];
+const READY_STATES = ["ready", "current"];
 
 function getNetlifyUrl(url) {
   return axios.get(url, {
@@ -12,7 +12,7 @@ function getNetlifyUrl(url) {
   });
 }
 
-const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT) => {
+const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT, BASE_PATH) => {
   const increment = 15;
 
   return new Promise((resolve, reject) => {
@@ -26,7 +26,7 @@ const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT) => {
         return reject(`Timeout reached: Deployment was not created within ${MAX_TIMEOUT} seconds.`);
       }
 
-      const { data: netlifyDeployments } = await getNetlifyUrl(url);
+      const { data: netlifyDeployments } = await getNetlifyUrl(`${url}${BASE_PATH ? BASE_PATH : ""}`);
 
       if (!netlifyDeployments) {
         return reject(`Failed to get deployments for site`);
@@ -44,7 +44,7 @@ const waitForDeployCreation = (url, commitSha, MAX_TIMEOUT) => {
   });
 };
 
-const waitForReadiness = (url, MAX_TIMEOUT) => {
+const waitForReadiness = (url, MAX_TIMEOUT, BASE_PATH) => {
   const increment = 30;
 
   return new Promise((resolve, reject) => {
@@ -61,7 +61,7 @@ const waitForReadiness = (url, MAX_TIMEOUT) => {
         );
       }
 
-      const { data: deploy } = await getNetlifyUrl(url);
+      const { data: deploy } = await getNetlifyUrl(`${url}${BASE_PATH ? BASE_PATH : ""}`);
 
       state = deploy.state;
 
@@ -75,38 +75,39 @@ const waitForReadiness = (url, MAX_TIMEOUT) => {
   });
 };
 
-const waitForUrl = async (url, MAX_TIMEOUT) => {
+const waitForUrl = async (url, MAX_TIMEOUT, BASE_PATH) => {
   const iterations = MAX_TIMEOUT / 3;
   for (let i = 0; i < iterations; i++) {
     try {
-      await axios.get(url);
+      await axios.get(`${url}${BASE_PATH ? BASE_PATH : ""}`);
       return;
     } catch (e) {
-      console.log(`URL ${url} unavailable, retrying...`);
+      console.log(`URL ${url}${BASE_PATH ? BASE_PATH : ""} unavailable, retrying...`);
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
-  core.setFailed(`Timeout reached: Unable to connect to ${url}`);
+  core.setFailed(`Timeout reached: Unable to connect to ${url}${BASE_PATH ? BASE_PATH : ""}`);
 };
 
 const run = async () => {
   try {
     const netlifyToken = process.env.NETLIFY_TOKEN;
     const commitSha =
-      github.context.eventName === 'pull_request' ? github.context.payload.pull_request.head.sha : github.context.sha;
+      github.context.eventName === "pull_request" ? github.context.payload.pull_request.head.sha : github.context.sha;
     const MAX_CREATE_TIMEOUT = 60 * 5; // 5 min
     const MAX_WAIT_TIMEOUT = 60 * 15; // 15 min
-    const MAX_READY_TIMEOUT = Number(core.getInput('max_timeout')) || 60;
-    const siteId = core.getInput('site_id');
+    const MAX_READY_TIMEOUT = Number(core.getInput("max_timeout")) || 60;
+    const BASE_PATH = String(core.getInput("base_path")) || "";
+    const siteId = core.getInput("site_id");
 
     if (!netlifyToken) {
-      core.setFailed('Please set NETLIFY_TOKEN env variable to your Netlify Personal Access Token secret');
+      core.setFailed("Please set NETLIFY_TOKEN env variable to your Netlify Personal Access Token secret");
     }
     if (!commitSha) {
-      core.setFailed('Could not determine GitHub commit');
+      core.setFailed("Could not determine GitHub commit");
     }
     if (!siteId) {
-      core.setFailed('Required field `site_id` was not provided');
+      core.setFailed("Required field `site_id` was not provided");
     }
 
     console.log(`Waiting for Netlify to create a deployment for git SHA ${commitSha}`);
@@ -116,10 +117,10 @@ const run = async () => {
       MAX_CREATE_TIMEOUT
     );
 
-    const url = `https://${commitDeployment.id}--${commitDeployment.name}.netlify.app`;
+    const url = `https://${commitDeployment.id}--${commitDeployment.name}.netlify.app${BASE_PATH}`;
 
-    core.setOutput('deploy_id', commitDeployment.id);
-    core.setOutput('url', url);
+    core.setOutput("deploy_id", commitDeployment.id);
+    core.setOutput("url", url);
 
     console.log(`Waiting for Netlify deployment ${commitDeployment.id} in site ${commitDeployment.name} to be ready`);
     await waitForReadiness(
@@ -130,7 +131,7 @@ const run = async () => {
     console.log(`Waiting for a 200 from: ${url}`);
     await waitForUrl(url, MAX_READY_TIMEOUT);
   } catch (error) {
-    core.setFailed(typeof error === 'string' ? error : error.message);
+    core.setFailed(typeof error === "string" ? error : error.message);
   }
 };
 
