@@ -10,6 +10,10 @@ inputs:
   max_timeout:
     description: "The max time to wait after the deployment is ready for a valid HTTP status code."
     required: false
+  base_path:
+    description: "Base path to test"
+    required: false
+    default: "/"
 outputs:
   deploy_id:
     description: "The Netlify deployment ID"
